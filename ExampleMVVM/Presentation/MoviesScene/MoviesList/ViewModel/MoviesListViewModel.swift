@@ -27,11 +27,10 @@ protocol MoviesListViewModelInput {
     func didCancelSearch()
     func showQueriesSuggestions()
     func closeQueriesSuggestions()
-    func didSelectItem(at index: Int)
+    func didSelectItem(at indexPath: IndexPath)
 }
 
 protocol MoviesListViewModelOutput {
-    var items: Observable<[MoviesListItemViewModel]> { get }
     var loadingType: Observable<MoviesListViewModelLoading?> { get }
     var query: Observable<String> { get }
     var error: Observable<String> { get }
@@ -40,6 +39,9 @@ protocol MoviesListViewModelOutput {
     var emptyDataTitle: String { get }
     var errorTitle: String { get }
     var searchBarPlaceholder: String { get }
+    var reloadItems: Observable<Bool> { get }
+    func numberOfItems(in section: Int) -> Int
+    func item(for indexPath: IndexPath) -> MoviesListItemViewModel
 }
 
 protocol MoviesListViewModel: MoviesListViewModelInput, MoviesListViewModelOutput {}
@@ -54,24 +56,20 @@ final class DefaultMoviesListViewModel: MoviesListViewModel {
     var hasMorePages: Bool { currentPage < totalPageCount }
     var nextPage: Int { hasMorePages ? currentPage + 1 : currentPage }
 
-    fileprivate struct Page {
-        let moviesPage: MoviesPage
-        let items: [MoviesListItemViewModel]
-    }
-    private var pages: [Page] = []
+    private var pages: [MoviesPage] = []
     private var moviesLoadTask: Cancellable? { willSet { moviesLoadTask?.cancel() } }
 
     // MARK: - OUTPUT
 
-    let items: Observable<[MoviesListItemViewModel]> = Observable([])
     let loadingType: Observable<MoviesListViewModelLoading?> = Observable(.none)
     let query: Observable<String> = Observable("")
     let error: Observable<String> = Observable("")
-    var isEmpty: Bool { return items.value.isEmpty }
+    var isEmpty: Bool { pages.movies.isEmpty }
     let screenTitle = NSLocalizedString("Movies", comment: "")
     let emptyDataTitle = NSLocalizedString("Search results", comment: "")
     let errorTitle = NSLocalizedString("Error", comment: "")
     let searchBarPlaceholder = NSLocalizedString("Search Movies", comment: "")
+    var reloadItems: Observable<Bool> = Observable(true)
 
     // MARK: - Init
 
@@ -88,18 +86,17 @@ final class DefaultMoviesListViewModel: MoviesListViewModel {
         totalPageCount = moviesPage.totalPages
 
         pages = pages
-            .filter { $0.moviesPage.page != moviesPage.page }
-            + [Page(moviesPage: moviesPage,
-                    items: moviesPage.movies.map(MoviesListItemViewModel.init))]
+            .filter { $0.page != moviesPage.page }
+            + [moviesPage]
 
-        items.value = pages.items
+        reloadItems.value = true
     }
 
     private func resetPages() {
         currentPage = 0
         totalPageCount = 1
         pages.removeAll()
-        items.value.removeAll()
+        reloadItems.value = true
     }
 
     private func load(movieQuery: MovieQuery, loadingType: MoviesListViewModelLoading) {
@@ -161,14 +158,27 @@ extension DefaultMoviesListViewModel {
         closures?.closeMovieQueriesSuggestions()
     }
 
-    func didSelectItem(at index: Int) {
-        closures?.showMovieDetails(pages.movies[index])
+    func didSelectItem(at indexPath: IndexPath) {
+        closures?.showMovieDetails(pages.movies[indexPath.row])
+    }
+}
+
+// MARK: - OUTPUT. View event methods
+
+extension DefaultMoviesListViewModel {
+
+    func item(for indexPath: IndexPath) -> MoviesListItemViewModel {
+        MoviesListItemViewModel(movie: pages.movies[indexPath.row])
+    }
+
+    func numberOfItems(in section: Int) -> Int {
+        pages.movies.count
     }
 }
 
 // MARK: - Private
 
-private extension Array where Element == DefaultMoviesListViewModel.Page {
-    var movies: [Movie] { flatMap { $0.moviesPage.movies } }
-    var items: [MoviesListItemViewModel] { flatMap { $0.items } }
+private extension Array where Element == MoviesPage {
+
+    var movies: [Movie] { flatMap { $0.movies } }
 }
