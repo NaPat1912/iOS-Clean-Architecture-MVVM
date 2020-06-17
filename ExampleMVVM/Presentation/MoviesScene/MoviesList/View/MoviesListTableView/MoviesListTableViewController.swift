@@ -23,6 +23,7 @@ final class MoviesListTableViewController: UITableViewController {
 
     private func bind(to viewModel: MoviesListViewModel) {
         viewModel.loadingType.observe(on: self) { [weak self] in self?.update(isLoadingNextPage: $0 == .nextPage) }
+        viewModel.reloadItems.observe(on: self) { [weak self] _ in self?.reload() }
     }
 
     func reload() {
@@ -47,7 +48,7 @@ final class MoviesListTableViewController: UITableViewController {
 extension MoviesListTableViewController {
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return viewModel.items.value.count
+        viewModel.numberOfItems(in: section)
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -55,10 +56,10 @@ extension MoviesListTableViewController {
             fatalError("Cannot dequeue reusable cell \(MoviesListItemCell.self) with reuseIdentifier: \(MoviesListItemCell.reuseIdentifier)")
         }
 
-        cell.fill(with: viewModel.items.value[indexPath.row],
-                  posterImagesRepository: posterImagesRepository)
+        let item = viewModel.item(for: indexPath)
+        cell.fill(with: item, posterImagesRepository: posterImagesRepository)
 
-        if indexPath.row == viewModel.items.value.count - 1 {
+        if indexPath.row == viewModel.numberOfItems(in: indexPath.section) - 1 {
             viewModel.didLoadNextPage()
         }
 
@@ -66,10 +67,10 @@ extension MoviesListTableViewController {
     }
 
     override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        return viewModel.isEmpty ? tableView.frame.height : super.tableView(tableView, heightForRowAt: indexPath)
+        viewModel.isEmpty ? tableView.frame.height : super.tableView(tableView, heightForRowAt: indexPath)
     }
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        viewModel.didSelectItem(at: indexPath.row)
+        viewModel.didSelectItem(at: indexPath)
     }
 }
